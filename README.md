@@ -1,6 +1,6 @@
-# codex-cli-base
+# Codex Sandbox
 
-`codex-cli-base` is a minimal Docker base image for running the [OpenAI Codex CLI](https://www.npmjs.com/package/@openai/codex).
+`Codex Sandbox` is a minimal Docker base image for running the [OpenAI Codex CLI](https://www.npmjs.com/package/@openai/codex).
 
 This repository provides a lightweight Ubuntu-based Docker image with Node.js and the @openai/codex CLI tool pre-installed.
 
