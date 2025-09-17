@@ -1,6 +1,6 @@
-codex-universal is licensed under an MIT License
+MIT License
 
-Copyright (c) 2025 OpenAI
+Copyright (c) 2025 Benyamin Salimi
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,32 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-
-The Docker image incorporates a variety of open source components, including but not limited to:
-
-- Base system: Ubuntu 24.04
-- Languages: Python, Node.js, Ruby, Go, Rust, Java (OpenJDK), Swift
-- Developer tools: Poetry, Bun, Gradle, LLVM, pipx, pyenv, and others
-
-These components are governed by licenses such as:
-- MIT, Apache-2.0, BSD, Python-2.0 (permissive)
-- GPL-2.0, GPL-2.0 with Classpath Exception, Artistic-2.0 (copyleft)
-
-We use these components in accordance with their licenses and do not statically link GPL-covered libraries with proprietary software.
-
-Software Bill of Materials (SBOM)
-
-To support transparency and license compliance, we provide the following SBOMs:
-
-- codex-universal-image-sbom.md : Human-readable list of components and licenses
-- codex-universal-image-sbom.spdx.json : SPDX-compliant JSON
-
-Source Code for Open Source Components
-
-You can obtain source code for components from their respective upstream sources:
-
-- Ubuntu: https://packages.ubuntu.com/
-- PyPI: https://pypi.org/
-- npm: https://www.npmjs.com/
-- GitHub (for tools like pyenv, nvm, bun, bazelisk)
