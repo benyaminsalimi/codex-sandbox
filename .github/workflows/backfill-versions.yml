@@ -89,166 +89,123 @@ jobs:
             printf '%s\n' "${VERSIONS_TO_BUILD[@]}"
           fi
 
-  build-amd64:
-    if: needs.discover-versions.outputs.total-versions != '0'
-    runs-on: ubuntu-24.04
-    needs: discover-versions
-    strategy:
-      fail-fast: false
-      matrix:
-        version: ${{ fromJson(needs.discover-versions.outputs.versions-matrix) }}
-    steps:
-      - name: Free disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
-          docker system prune -af || true
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.GHCR_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.DOCKERHUB_REGISTRY }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - name: Build & push (amd64) - version ${{ matrix.version }}
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}:amd64-${{ matrix.version }}
-            ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE_NAME }}:amd64-${{ matrix.version }}
-          # Use GHA cache with version-specific scope
-          cache-from: type=gha,scope=${{ github.workflow }}-${{ runner.os }}-amd64-${{ matrix.version }}
-          cache-to:   type=gha,mode=min,scope=${{ github.workflow }}-${{ runner.os }}-amd64-${{ matrix.version }}
-          provenance: false
-          sbom: false
-          secrets: |
-            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
-
-  build-arm64:
-    if: needs.discover-versions.outputs.total-versions != '0'
-    runs-on: ubuntu-24.04-arm
-    needs: discover-versions
-    strategy:
-      fail-fast: false
-      matrix:
-        version: ${{ fromJson(needs.discover-versions.outputs.versions-matrix) }}
-    steps:
-      - name: Free disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
-          docker system prune -af || true
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.GHCR_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.DOCKERHUB_REGISTRY }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - name: Build & push (arm64) - version ${{ matrix.version }}
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          platforms: linux/arm64
-          push: true
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}:arm64-${{ matrix.version }}
-            ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE_NAME }}:arm64-${{ matrix.version }}
-          cache-from: type=gha,scope=${{ github.workflow }}-${{ runner.os }}-arm64-${{ matrix.version }}
-          cache-to:   type=gha,mode=min,scope=${{ github.workflow }}-${{ runner.os }}-arm64-${{ matrix.version }}
-          provenance: false
-          sbom: false
-          secrets: |
-            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
-
-  create-manifests:
+  build-multi-arch:
     if: needs.discover-versions.outputs.total-versions != '0'
     runs-on: ubuntu-latest
-    needs: [discover-versions, build-amd64, build-arm64]
+    needs: discover-versions
     strategy:
       fail-fast: false
       matrix:
         version: ${{ fromJson(needs.discover-versions.outputs.versions-matrix) }}
     steps:
-      - uses: docker/login-action@v3
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get autoremove -y || true
+          sudo apt-get autoclean -y || true
+          docker system prune -af || true
+          df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.12.0
+          platforms: linux/amd64,linux/arm64
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.GHCR_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/login-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.DOCKERHUB_REGISTRY }}
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Create multi-arch manifest for GHCR - version ${{ matrix.version }}
-        run: |
-          VERSION="${{ matrix.version }}"
-          docker buildx imagetools create \
-            -t "$GHCR_REGISTRY/$GHCR_IMAGE_NAME:$VERSION" \
-            "$GHCR_REGISTRY/$GHCR_IMAGE_NAME:amd64-$VERSION" \
-            "$GHCR_REGISTRY/$GHCR_IMAGE_NAME:arm64-$VERSION"
-          echo "✅ Created GHCR manifest for version $VERSION"
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}
+            ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ matrix.version }}
 
-      - name: Create multi-arch manifest for Docker Hub - version ${{ matrix.version }}
-        run: |
-          VERSION="${{ matrix.version }}"
-          docker buildx imagetools create \
-            -t "$DOCKERHUB_REGISTRY/$DOCKERHUB_IMAGE_NAME:$VERSION" \
-            "$DOCKERHUB_REGISTRY/$DOCKERHUB_IMAGE_NAME:amd64-$VERSION" \
-            "$DOCKERHUB_REGISTRY/$DOCKERHUB_IMAGE_NAME:arm64-$VERSION"
-          echo "✅ Created Docker Hub manifest for version $VERSION"
+      - name: Build and push multi-arch image - version ${{ matrix.version }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ github.workflow }}-${{ matrix.version }}
+          cache-to: type=gha,mode=max,scope=${{ github.workflow }}-${{ matrix.version }}
+          build-args: |
+            CODEX_VERSION=${{ matrix.version }}
+          secrets: |
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          provenance: false
+          sbom: false
 
-      - name: Generate artifact attestation for GHCR - version ${{ matrix.version }}
-        run: |
-          VERSION="${{ matrix.version }}"
-          DIGEST=$(docker buildx imagetools inspect "$GHCR_REGISTRY/$GHCR_IMAGE_NAME:$VERSION" | awk '/^Digest:/{print $2; exit}')
-          echo "📋 GHCR $VERSION digest: $DIGEST"
-        continue-on-error: true
-
-      - name: Generate artifact attestation for Docker Hub - version ${{ matrix.version }}
-        run: |
-          VERSION="${{ matrix.version }}"
-          DIGEST=$(docker buildx imagetools inspect "$DOCKERHUB_REGISTRY/$DOCKERHUB_IMAGE_NAME:$VERSION" | awk '/^Digest:/{print $2; exit}')
-          echo "📋 Docker Hub $VERSION digest: $DIGEST"
-        continue-on-error: true
+      - name: Generate artifact attestation
+        if: success()
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: |
+            ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}
+            ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
   summary:
     if: always()
     runs-on: ubuntu-latest
-    needs: [discover-versions, build-amd64, build-arm64, create-manifests]
+    needs: [discover-versions, build-multi-arch]
     steps:
       - name: Build Summary
         run: |
           TOTAL_VERSIONS="${{ needs.discover-versions.outputs.total-versions }}"
+          BUILD_STATUS="${{ needs.build-multi-arch.result }}"
+          
+          echo "## 🎉 Backfill Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ "$TOTAL_VERSIONS" = "0" ]; then
-            echo "✨ **Backfill Complete!** All versions are already built."
+            echo "✨ **All versions are already built!** No new images were created." >> $GITHUB_STEP_SUMMARY
           else
-            echo "🎉 **Backfill Summary**"
-            echo ""
-            echo "📦 **Built $TOTAL_VERSIONS versions:**"
-            echo '${{ needs.discover-versions.outputs.versions-matrix }}' | jq -r '.[]' | sed 's/^/- /'
-            echo ""
-            echo "🔗 **Images available at:**"
-            echo "- GitHub Container Registry: \`ghcr.io/${{ env.GHCR_IMAGE_NAME }}:<version>\`"
-            echo "- Docker Hub: \`${{ env.DOCKERHUB_IMAGE_NAME }}:<version>\`"
-            echo ""
-            echo "💡 **Next steps:**"
-            echo "- Run this workflow again to build more versions if needed"
-            echo "- Use \`force_rebuild: true\` to rebuild existing versions"
-            echo "- Increase \`max_versions\` to build more versions at once"
+            echo "📦 **Built $TOTAL_VERSIONS versions** with multi-architecture support (amd64/arm64):" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '${{ needs.discover-versions.outputs.versions-matrix }}' | jq -r '.[]' | sed 's/^/- `/' | sed 's/$/`/' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            if [ "$BUILD_STATUS" = "success" ]; then
+              echo "✅ **Build Status:** All images built successfully!" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ **Build Status:** Some builds may have failed. Check the logs above." >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "🔗 **Images available at:**" >> $GITHUB_STEP_SUMMARY
+            echo "- **GitHub Container Registry:** \`ghcr.io/${{ env.GHCR_IMAGE_NAME }}:<version>\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Docker Hub:** \`${{ env.DOCKERHUB_IMAGE_NAME }}:<version>\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "💡 **Next steps:**" >> $GITHUB_STEP_SUMMARY
+            echo "- Run this workflow again to build more versions if needed" >> $GITHUB_STEP_SUMMARY
+            echo "- Use \`force_rebuild: true\` to rebuild existing versions" >> $GITHUB_STEP_SUMMARY
+            echo "- Increase \`max_versions\` to build more versions at once (max: 50)" >> $GITHUB_STEP_SUMMARY
           fi
