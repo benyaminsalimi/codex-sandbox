@@ -1,4 +1,6 @@
 # Codex Sandbox
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-benyamin%2Fcodex--sandbox-blue?logo=docker)](https://hub.docker.com/r/benyamin/codex-sandbox)
+
 
 `Codex Sandbox` is a minimal Docker base image for running the [OpenAI Codex CLI](https://www.npmjs.com/package/@openai/codex).
 
