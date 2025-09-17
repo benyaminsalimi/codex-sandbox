@@ -146,6 +146,7 @@ jobs:
             type=raw,value=${{ matrix.version }}
 
       - name: Build and push multi-arch image - version ${{ matrix.version }}
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -171,6 +172,41 @@ jobs:
             ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE_NAME }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+
+      # Failure diagnostics: collect useful logs and upload as an artifact when the job fails
+      - name: Collect build failure diagnostics
+        if: failure()
+        run: |
+          set -e
+          mkdir -p build-failure-diagnostics
+
+          echo "=== docker version ===" > build-failure-diagnostics/docker-version.txt
+          docker version >> build-failure-diagnostics/docker-version.txt 2>&1 || true
+
+          echo "=== docker info ===" > build-failure-diagnostics/docker-info.txt
+          docker info >> build-failure-diagnostics/docker-info.txt 2>&1 || true
+
+          echo "=== docker buildx ls ===" > build-failure-diagnostics/buildx-ls.txt
+          docker buildx ls >> build-failure-diagnostics/buildx-ls.txt 2>&1 || true
+
+          echo "=== docker images (local) ===" > build-failure-diagnostics/docker-images.txt
+          docker images --format '{{.Repository}} {{.Tag}} {{.ID}} {{.Size}}' >> build-failure-diagnostics/docker-images.txt 2>&1 || true
+
+          # Attempt to capture buildkit logs from journal or files if available
+          echo "=== buildkitd logs (if available) ===" > build-failure-diagnostics/buildkit-logs.txt
+          if command -v journalctl >/dev/null 2>&1; then
+            journalctl -u buildkit -n 1000 >> build-failure-diagnostics/buildkit-logs.txt 2>&1 || true
+          fi
+
+          # Capture full workflow run logs (step logs are available via GH UI; this is supplemental)
+          echo "Diagnostics collected:" && ls -la build-failure-diagnostics
+
+      - name: Upload build failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-failure-logs-${{ matrix.version }}
+          path: build-failure-diagnostics
 
   summary:
     if: always()
