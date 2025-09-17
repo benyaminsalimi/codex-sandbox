@@ -6,7 +6,7 @@ on:
       dry_run:
         description: 'Dry run - check what would be built without actually building'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 jobs:

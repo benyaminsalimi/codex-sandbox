@@ -30,7 +30,9 @@ if [ -z "$(DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect "$image_name"
   docker buildx build \
     --platform "$platforms" \
     --build-arg "CODEX_VERSION=${codex_version}" \
-    -t "$image_name" --push .
+    -t "$image_name" \
+    -t "benyamin/codex-sandbox:latest" \
+    --push .
 
   # Extract current version from VERSION.md
   current_version=$(grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' VERSION.md 2>/dev/null || echo "unknown")
